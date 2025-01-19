@@ -59,8 +59,8 @@ close as possible to the value intended to be set dynamically in the future.
 Initialize a decorator as a `''` if the intended value is a string, and as
 `null` if it will be an object or a function.
 
-Remember this example works only with value types as reference types will be
-shared amongst all requests. See [decorateRequest](#decorate-request).
+Remember this example works only with value types as reference types will
+thrown and error during the fastify startup. See [decorateRequest](#decorate-request).
 
 See [JavaScript engine fundamentals: Shapes and Inline
 Caches](https://mathiasbynens.be/notes/shapes-ics) for more information on this
@@ -83,7 +83,7 @@ fastify.decorate('utility', function () {
 })
 ```
 
-As mentioned above, non-function values can be attached:
+As mentioned above, non-function values can be attached to the server instance as:
 
 ```js
 fastify.decorate('conf', {
@@ -101,23 +101,58 @@ console.log(fastify.conf.db)
 ```
 
 The decorated [Fastify server](./Server.md) is bound to `this` in
-route [route](./Routes.md) handlers:
+[route](./Routes.md) handlers:
 
 ```js
 fastify.decorate('db', new DbConnection())
 
 fastify.get('/', async function (request, reply) {
-  reply({hello: await this.db.query('world')})
+  // using return
+  return { hello: await this.db.query('world') }
+
+  // or
+  // using reply.send()
+  reply.send({ hello: await this.db.query('world') })
+  await reply
 })
 ```
 
 The `dependencies` parameter is an optional list of decorators that the
 decorator being defined relies upon. This list is simply a list of string names
 of other decorators. In the following example, the "utility" decorator depends
-upon "greet" and "log" decorators:
+upon "greet" and "hi" decorators:
 
 ```js
-fastify.decorate('utility', fn, ['greet', 'log'])
+async function greetDecorator (fastify, opts) {
+  fastify.decorate('greet', () => {
+    return 'greet message'
+  })
+}
+
+async function hiDecorator (fastify, opts) {
+  fastify.decorate('hi', () => {
+    return 'hi message'
+  })
+}
+
+async function utilityDecorator (fastify, opts) {
+  fastify.decorate('utility', () => {
+    return `${fastify.greet()} | ${fastify.hi()}`
+  })
+}
+
+fastify.register(fastifyPlugin(greetDecorator, { name: 'greet' }))
+fastify.register(fastifyPlugin(hiDecorator, { name: 'hi' }))
+fastify.register(fastifyPlugin(utilityDecorator, { dependencies: ['greet', 'hi'] }))
+
+fastify.get('/', function (req, reply) {
+  // Response: {"hello":"greet message | hi message"}
+  reply.send({ hello: fastify.utility() })
+})
+
+fastify.listen({ port: 3000 }, (err, address) => {
+  if (err) throw err
+})
 ```
 
 Note: using an arrow function will break the binding of `this` to the
@@ -142,23 +177,24 @@ fastify.decorateReply('utility', function () {
 Note: using an arrow function will break the binding of `this` to the Fastify
 `Reply` instance.
 
-Note: using `decorateReply` will emit a warning if used with a reference type:
+Note: using `decorateReply` will throw and error if used with a reference type:
 
 ```js
 // Don't do this
 fastify.decorateReply('foo', { bar: 'fizz'})
 ```
-In this example, the reference of the object is shared with all the requests:
-**any mutation will impact all requests, potentially creating security
-vulnerabilities or memory leaks**. To achieve proper encapsulation across
-requests configure a new value for each incoming request in the [`'onRequest'`
-hook](./Hooks.md#onrequest). Example:
+In this example, the reference of the object would be shared with all the requests
+and **any mutation will impact all requests, potentially creating security
+vulnerabilities or memory leaks**, so Fastify blocks it.
+
+To achieve proper encapsulation across requests configure a new value for each
+incoming request in the [`'onRequest'` hook](./Hooks.md#onrequest). Example:
 
 ```js
 const fp = require('fastify-plugin')
 
 async function myPlugin (app) {
-  app.decorateRequest('foo', null)
+  app.decorateRequest('foo')
   app.addHook('onRequest', async (req, reply) => {
     req.foo = { bar: 42 }
   })
@@ -184,24 +220,26 @@ fastify.decorateRequest('utility', function () {
 Note: using an arrow function will break the binding of `this` to the Fastify
 `Request` instance.
 
-Note: using `decorateRequest` will emit a warning if used with a reference type:
+Note: using `decorateRequest` will emit an error if used with a reference type:
 
 ```js
 // Don't do this
 fastify.decorateRequest('foo', { bar: 'fizz'})
 ```
-In this example, the reference of the object is shared with all the requests:
-**any mutation will impact all requests, potentially creating security
-vulnerabilities or memory leaks**.
+In this example, the reference of the object would be shared with all the requests
+and **any mutation will impact all requests, potentially creating security
+vulnerabilities or memory leaks**, so Fastify blocks it.
 
 To achieve proper encapsulation across requests configure a new value for each
-incoming request in the [`'onRequest'` hook](./Hooks.md#onrequest). Example:
+incoming request in the [`'onRequest'` hook](./Hooks.md#onrequest).
+
+Example:
 
 ```js
 const fp = require('fastify-plugin')
 
 async function myPlugin (app) {
-  app.decorateRequest('foo', null)
+  app.decorateRequest('foo')
   app.addHook('onRequest', async (req, reply) => {
     req.foo = { bar: 42 }
   })
@@ -209,6 +247,29 @@ async function myPlugin (app) {
 
 module.exports = fp(myPlugin)
 ```
+
+The hook solution is more flexible and allows for more complex initialization
+because you can add more logic to the `onRequest` hook.
+
+Another approach is to use the getter/setter pattern, but it requires 2 decorators:
+
+```js
+fastify.decorateRequest('my_decorator_holder') // define the holder
+fastify.decorateRequest('user', {
+  getter () {
+    this.my_decorator_holder ??= {} // initialize the holder
+    return this.my_decorator_holder
+  }
+})
+
+fastify.get('/', async function (req, reply) {
+  req.user.access = 'granted'
+  // other code
+})
+```
+
+This ensures that the `user` property is always unique for each
+request.
 
 See [`decorate`](#decorate) for information about the `dependencies` parameter.
 

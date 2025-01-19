@@ -6,7 +6,7 @@ recommend using [JSON Schema](https://json-schema.org/) to validate your routes
 and serialize your outputs. Internally, Fastify compiles the schema into a
 highly performant function.
 
-Validation will only be attempted if the content type is `application-json`, as
+Validation will only be attempted if the content type is `application/json`, as
 described in the documentation for the [content type
 parser](./ContentTypeParser.md).
 
@@ -19,8 +19,9 @@ All the examples in this section are using the [JSON Schema Draft
 > use with user-provided schemas. See [Ajv](https://npm.im/ajv) and
 > [fast-json-stringify](https://npm.im/fast-json-stringify) for more details.
 >
-> Moreover, the [`$async` Ajv
-> feature](https://ajv.js.org/guide/async-validation.html) should not be used as
+> Regardless the [`$async` Ajv
+> feature](https://ajv.js.org/guide/async-validation.html) is supported
+> by Fastify, it should not be used as
 > part of the first validation strategy. This option is used to access Databases
 > and reading them during the validation process may lead to Denial of Service
 > Attacks to your application. If you need to run `async` tasks, use [Fastify's
@@ -48,16 +49,16 @@ The shared schemas can be reused through the JSON Schema
 [**`$ref`**](https://tools.ietf.org/html/draft-handrews-json-schema-01#section-8)
 keyword. Here is an overview of _how_ references work:
 
-+ `myField: { $ref: '#foo'}` will search for field with `$id: '#foo'` inside the
++ `myField: { $ref: '#foo' }` will search for field with `$id: '#foo'` inside the
   current schema
-+ `myField: { $ref: '#/definitions/foo'}` will search for field
++ `myField: { $ref: '#/definitions/foo' }` will search for field
   `definitions.foo` inside the current schema
-+ `myField: { $ref: 'http://url.com/sh.json#'}` will search for a shared schema
++ `myField: { $ref: 'http://url.com/sh.json#' }` will search for a shared schema
   added with `$id: 'http://url.com/sh.json'`
-+ `myField: { $ref: 'http://url.com/sh.json#/definitions/foo'}` will search for
++ `myField: { $ref: 'http://url.com/sh.json#/definitions/foo' }` will search for
   a shared schema added with `$id: 'http://url.com/sh.json'` and will use the
   field `definitions.foo`
-+ `myField: { $ref: 'http://url.com/sh.json#foo'}` will search for a shared
++ `myField: { $ref: 'http://url.com/sh.json#foo' }` will search for a shared
   schema added with `$id: 'http://url.com/sh.json'` and it will look inside of
   it for object with `$id: '#foo'`
 
@@ -234,6 +235,28 @@ const schema = {
 fastify.post('/the/url', { schema }, handler)
 ```
 
+For `body` schema, it is further possible to differentiate the schema per content
+type by nesting the schemas inside `content` property. The schema validation
+will be applied based on the `Content-Type` header in the request.
+
+```js
+fastify.post('/the/url', {
+  schema: {
+    body: {
+      content: {
+        'application/json': {
+          schema: { type: 'object' }
+        },
+        'text/plain': {
+          schema: { type: 'string' }
+        }
+        // Other content types will not be validated
+      }
+    }
+  }
+}, handler)
+```
+
 *Note that Ajv will try to [coerce](https://ajv.js.org/coercion.html) the values
 to the types specified in your schema `type` keywords, both to pass the
 validation and to use the correctly typed data afterwards.*
@@ -268,7 +291,7 @@ fastify.listen({ port: 3000 }, (err) => {
 ```sh
 curl -X GET "http://localhost:3000/?ids=1
 
-{"params":{"hello":["1"]}}
+{"params":{"ids":["1"]}}
 ```
 
 You can also specify a custom schema validator for each parameter type (body,
@@ -394,9 +417,11 @@ configuration](https://github.com/fastify/ajv-compiler#ajv-configuration) is:
 
 ```js
 {
-  coerceTypes: true, // change data type of data to match type keyword
+  coerceTypes: 'array', // change data type of data to match type keyword
   useDefaults: true, // replace missing properties and items with the values from corresponding default keyword
-  removeAdditional: true, // remove additional properties
+  removeAdditional: true, // remove additional properties if additionalProperties is set to false, see: https://ajv.js.org/guide/modifying-data.html#removing-additional-properties
+  uriResolver: require('fast-uri'),
+  addUsedSchema: false,
   // Explicitly set allErrors to `false`.
   // When set to `true`, a DoS attack is possible.
   allErrors: false
@@ -432,7 +457,7 @@ validator you are using._
 <a id="using-other-validation-libraries"></a>
 
 The `setValidatorCompiler` function makes it easy to substitute `ajv` with
-almost any Javascript validation library ([joi](https://github.com/hapijs/joi/),
+almost any JavaScript validation library ([joi](https://github.com/hapijs/joi/),
 [yup](https://github.com/jquense/yup/), ...) or a custom one:
 
 ```js
@@ -611,6 +636,54 @@ const schema = {
 
 fastify.post('/the/url', { schema }, handler)
 ```
+You can even have a specific response schema for different content types.
+For example:
+```js
+const schema = {
+  response: {
+    200: {
+      description: 'Response schema that support different content types'
+      content: {
+        'application/json': {
+          schema: {
+            name: { type: 'string' },
+            image: { type: 'string' },
+            address: { type: 'string' }
+          }
+        },
+        'application/vnd.v1+json': {
+          schema: {
+            type: 'array',
+            items: { $ref: 'test' }
+          }
+        }
+      }
+    },
+    '3xx': {
+      content: {
+        'application/vnd.v2+json': {
+          schema: {
+            fullName: { type: 'string' },
+            phone: { type: 'string' }
+          }
+        }
+      }
+    },
+    default: {
+      content: {
+        // */* is match-all content-type
+        '*/*': {
+          schema: {
+            desc: { type: 'string' }
+          }
+        }
+      }
+    }
+  }
+}
+
+fastify.post('/url', { schema }, handler)
+```
 
 #### Serializer Compiler
 <a id="schema-serializer"></a>
@@ -621,7 +694,7 @@ change the default serialization method by providing a function to serialize
 every route where you do.
 
 ```js
-fastify.setSerializerCompiler(({ schema, method, url, httpStatus }) => {
+fastify.setSerializerCompiler(({ schema, method, url, httpStatus, contentType }) => {
   return data => JSON.stringify(data)
 })
 
@@ -632,8 +705,11 @@ fastify.get('/user', {
   schema: {
     response: {
       '2xx': {
-        id: { type: 'number' },
-        name: { type: 'string' }
+        type: 'object',
+        properties: {
+          id: { type: 'number' },
+          name: { type: 'string' }
+        }
       }
     }
   }

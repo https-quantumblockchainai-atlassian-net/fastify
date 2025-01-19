@@ -22,21 +22,24 @@ const fastify = require('fastify')({
 ```
 
 Enabling the logger with appropriate configuration for both local development
-and production environment requires bit more configuration:
+and production and test environment requires a bit more configuration:
+
 ```js
+const envToLogger = {
+  development: {
+    transport: {
+      target: 'pino-pretty',
+      options: {
+        translateTime: 'HH:MM:ss Z',
+        ignore: 'pid,hostname',
+      },
+    },
+  },
+  production: true,
+  test: false,
+}
 const fastify = require('fastify')({
-  logger: {
-      transport:
-        environment === 'development'
-          ? {
-              target: 'pino-pretty',
-              options: {
-                translateTime: 'HH:MM:ss Z',
-                ignore: 'pid,hostname'
-              }
-            }
-          : undefined
-    }
+  logger: envToLogger[environment] ?? true // defaults to true if no entry matches in the map
 })
 ```
 ⚠️ `pino-pretty` needs to be installed as a dev dependency, it is not included
@@ -58,9 +61,9 @@ the Fastify instance:
 fastify.log.info('Something important happened!');
 ```
 
-If you want to pass some options to the logger, just pass them to Fastify. You
-can find all available options in the [Pino
-documentation](https://github.com/pinojs/pino/blob/master/docs/api.md#pinooptions-stream).
+If you want to pass some options to the logger, just pass them to Fastify.
+You can find all available options in the
+[Pino documentation](https://github.com/pinojs/pino/blob/master/docs/api.md#options).
 If you want to specify a file destination, use:
 
 ```js
@@ -95,16 +98,17 @@ const fastify = require('fastify')({
 <a id="logging-request-id"></a>
 
 By default, Fastify adds an ID to every request for easier tracking. If the
-"request-id" header is present its value is used, otherwise a new incremental ID
-is generated. See Fastify Factory
-[`requestIdHeader`](./Server.md#factory-request-id-header) and Fastify Factory
-[`genReqId`](./Server.md#genreqid) for customization options.
+requestIdHeader-option is set and the corresponding header is present than
+its value is used, otherwise a new incremental ID is generated. See Fastify
+Factory [`requestIdHeader`](./Server.md#factory-request-id-header) and Fastify
+Factory [`genReqId`](./Server.md#genreqid) for customization options.
 
 The default logger is configured with a set of standard serializers that
 serialize objects with `req`, `res`, and `err` properties. The object received
 by `req` is the Fastify [`Request`](./Request.md) object, while the object
-received by `res` is the Fastify [`Reply`](./Reply.md) object. This behaviour
+received by `res` is the Fastify [`Reply`](./Reply.md) object. This behavior
 can be customized by specifying custom serializers.
+
 ```js
 const fastify = require('fastify')({
   logger: {
@@ -136,7 +140,7 @@ const fastify = require('fastify')({
         return {
           method: request.method,
           url: request.url,
-          path: request.routerPath,
+          path: request.routeOptions.url,
           parameters: request.params,
           // Including the headers in the log could be in violation
           // of privacy laws, e.g. GDPR. You should use the "redact" option to
@@ -149,6 +153,34 @@ const fastify = require('fastify')({
   }
 });
 ```
+
+**Note**: In certain cases, the [`Reply`](./Reply.md) object passed to the `res`
+serializer cannot be fully constructed. When writing a custom `res` serializer,
+it is necessary to check for the existence of any properties on `reply` aside
+from `statusCode`, which is always present. For example, the existence of
+`getHeaders` must be verified before it can be called:
+
+```js
+const fastify = require('fastify')({
+  logger: {
+    transport: {
+      target: 'pino-pretty'
+    },
+    serializers: {
+      res (reply) {
+        // The default
+        return {
+          statusCode: reply.statusCode
+          headers: typeof reply.getHeaders === 'function'
+            ? reply.getHeaders()
+            : {}
+        }
+      },
+    }
+  }
+});
+```
+
 **Note**: The body cannot be serialized inside a `req` method because the
 request is serialized when we create the child logger. At that time, the body is
 not yet parsed.
@@ -164,19 +196,24 @@ app.addHook('preHandler', function (req, reply, done) {
 })
 ```
 
+**Note**: Care should be taken to ensure serializers never throw, as an error
+thrown from a serializer has the potential to cause the Node process to exit.
+See the [Pino documentation](https://getpino.io/#/docs/api?id=opt-serializers)
+on serializers for more information.
 
 *Any logger other than Pino will ignore this option.*
 
 You can also supply your own logger instance. Instead of passing configuration
-options, pass the instance. The logger you supply must conform to the Pino
-interface; that is, it must have the following methods: `info`, `error`,
-`debug`, `fatal`, `warn`, `trace`, `child`.
+options, pass the instance as `loggerInstance`. The logger you supply must
+conform to the Pino interface; that is, it must have the following methods:
+`info`, `error`, `debug`, `fatal`, `warn`, `trace`, `silent`, `child` and a
+string property `level`.
 
 Example:
 
 ```js
 const log = require('pino')({ level: 'info' })
-const fastify = require('fastify')({ logger: log })
+const fastify = require('fastify')({ loggerInstance: log })
 
 log.info('does not have request information')
 
@@ -207,7 +244,7 @@ const fastify = Fastify({
           method: request.method,
           url: request.url,
           headers: request.headers,
-          hostname: request.hostname,
+          host: request.host,
           remoteAddress: request.ip,
           remotePort: request.socket.remotePort
         }

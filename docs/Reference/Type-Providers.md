@@ -11,15 +11,22 @@ keep associated types for each schema defined in your project.
 
 Type Providers are offered as additional packages you will need to install into
 your project. Each provider uses a different inference library under the hood;
-allowing you to select the library most appropriate for your needs. Type
+allowing you to select the library most appropriate for your needs. Official Type
 Provider packages follow a `@fastify/type-provider-{provider-name}` naming
-convention.
+convention, and there are several community ones available as well.
 
 The following inference packages are supported:
 
-- `json-schema-to-ts` -
-  [github](https://github.com/ThomasAribart/json-schema-to-ts)
-- `typebox` - [github](https://github.com/sinclairzx81/typebox)
+- [`json-schema-to-ts`](https://github.com/ThomasAribart/json-schema-to-ts)
+- [`typebox`](https://github.com/sinclairzx81/typebox)
+- [`zod`](https://github.com/colinhacks/zod)
+
+See also the Type Provider wrapper packages for each of the packages respectively:
+
+- [`@fastify/type-provider-json-schema-to-ts`](https://github.com/fastify/fastify-type-provider-json-schema-to-ts)
+- [`@fastify/type-provider-typebox`](https://github.com/fastify/fastify-type-provider-typebox)
+- [`fastify-type-provider-zod`](https://github.com/turkerdev/fastify-type-provider-zod)
+ (3rd party)
 
 ### Json Schema to Ts
 
@@ -30,29 +37,26 @@ $ npm i @fastify/type-provider-json-schema-to-ts
 ```
 
 ```typescript
-import { JsonSchemaToTsProvider } from '@fastify/type-provider-json-schema-to-ts'
-
 import fastify from 'fastify'
+import { JsonSchemaToTsProvider } from '@fastify/type-provider-json-schema-to-ts'
 
 const server = fastify().withTypeProvider<JsonSchemaToTsProvider>()
 
 server.get('/route', {
-    schema: {
-        querystring: {
-            type: 'object',
-            properties: {
-                foo: { type: 'number' },
-                bar: { type: 'string' },
-            },
-            required: ['foo', 'bar']
-        }
-    } as const // don't forget to use const !
-
+  schema: {
+    querystring: {
+      type: 'object',
+      properties: {
+        foo: { type: 'number' },
+        bar: { type: 'string' },
+      },
+      required: ['foo', 'bar']
+    }
+  }
 }, (request, reply) => {
 
-    // type Query = { foo: number, bar: string }
-
-    const { foo, bar } = request.query // type safe!
+  // type Query = { foo: number, bar: string }
+  const { foo, bar } = request.query // type safe!
 })
 ```
 
@@ -65,31 +69,35 @@ $ npm i @fastify/type-provider-typebox
 ```
 
 ```typescript
+import fastify from 'fastify'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { Type } from '@sinclair/typebox'
-
-import fastify from 'fastify'
 
 const server = fastify().withTypeProvider<TypeBoxTypeProvider>()
 
 server.get('/route', {
-    schema: {
-        querystring: Type.Object({
-            foo: Type.Number(),
-            bar: Type.String()
-        })
-    }
+  schema: {
+    querystring: Type.Object({
+      foo: Type.Number(),
+      bar: Type.String()
+    })
+  }
 }, (request, reply) => {
 
-    // type Query = { foo: number, bar: string }
-
-    const { foo, bar } = request.query // type safe!
+  // type Query = { foo: number, bar: string }
+  const { foo, bar } = request.query // type safe!
 })
 ```
 
 See also the [TypeBox
 documentation](https://github.com/sinclairzx81/typebox#validation) on how to set
 up AJV to work with TypeBox.
+
+### Zod
+
+See [official documentation](https://github.com/turkerdev/fastify-type-provider-zod)
+for Zod type provider instructions.
+
 
 ### Scoped Type-Provider
 
@@ -134,7 +142,7 @@ function pluginWithJsonSchema(fastify: FastifyInstance, _opts, done): void {
             y: { type: 'number' },
             z: { type: 'boolean' }
           },
-        } as const
+        }
       }
     }, (req) => {
       const { x, y, z } = req.body // type safe
@@ -146,23 +154,16 @@ fastify.register(pluginWithJsonSchema)
 fastify.register(pluginWithTypebox)
 ```
 
-It's also important to mention that once the types don't propagate globally,
-_currently_ is not possible to avoid multiple registrations on routes when
-dealing with several scopes, see bellow:
+It's also important to mention that since the types don't propagate globally,
+_currently_ it is not possible to avoid multiple registrations on routes when
+dealing with several scopes, see below:
 
 ```ts
 import Fastify from 'fastify'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { Type } from '@sinclair/typebox'
 
-const server = Fastify({
-    ajv: {
-        customOptions: {
-            strict: 'log',
-            keywords: ['kind', 'modifier'],
-        },
-    },
-}).withTypeProvider<TypeBoxTypeProvider>()
+const server = Fastify().withTypeProvider<TypeBoxTypeProvider>()
 
 server.register(plugin1) // wrong
 server.register(plugin2) // correct
@@ -177,7 +178,7 @@ function plugin1(fastify: FastifyInstance, _opts, done): void {
       })
     }
   }, (req) => {
-    // it doesn't works! in a new scope needs to call `withTypeProvider` again
+    // it doesn't work! in a new scope needs to call `withTypeProvider` again
     const { x, y, z } = req.body
   });
   done()
@@ -213,14 +214,7 @@ import Fastify from 'fastify'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { registerRoutes } from './routes'
 
-const server = Fastify({
-    ajv: {
-        customOptions: {
-            strict: 'log',
-            keywords: ['kind', 'modifier'],
-        },
-    },
-}).withTypeProvider<TypeBoxTypeProvider>()
+const server = Fastify().withTypeProvider<TypeBoxTypeProvider>()
 
 registerRoutes(server)
 
@@ -232,7 +226,7 @@ server.listen({ port: 3000 })
 import { Type } from '@sinclair/typebox'
 import {
   FastifyInstance,
-  FastifyLoggerInstance,
+  FastifyBaseLogger,
   RawReplyDefaultExpression,
   RawRequestDefaultExpression,
   RawServerDefault
@@ -243,7 +237,7 @@ type FastifyTypebox = FastifyInstance<
   RawServerDefault,
   RawRequestDefaultExpression<RawServerDefault>,
   RawReplyDefaultExpression<RawServerDefault>,
-  FastifyLoggerInstance,
+  FastifyBaseLogger,
   TypeBoxTypeProvider
 >;
 
