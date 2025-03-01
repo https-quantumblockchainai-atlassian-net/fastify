@@ -15,27 +15,33 @@ jobs:
     strategy:
       matrix:
         # Maintenance and active LTS
-        node-version: [14, 16]
-        os: [ubuntu-18.04]
+        node-version: [20, 22]
+        os: [ubuntu-latest]
+        pnpm-version: [8]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          check-latest: true
 
       - name: Install with pnpm
-        run: |
-          curl -L https://unpkg.com/@pnpm/self-installer | node
-          pnpm install
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ matrix.pnpm-version }}
+
+      - run: pnpm install
 
       - name: Run tests
         run: |
           pnpm run test:ci
+        env:
+          NODE_OPTIONS: no-network-family-autoselection
 
   yarn:
     runs-on: ${{ matrix.os }}
@@ -43,24 +49,29 @@ jobs:
     strategy:
       matrix:
         # Maintenance and active LTS
-        node-version: [14, 16]
-        os: [ubuntu-18.04]
+        node-version: [20, 22]
+        os: [ubuntu-latest]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          check-latest: true
 
       - name: Install with yarn
         run: |
           curl -o- -L https://yarnpkg.com/install.sh | bash
           yarn install --ignore-engines
 
+      - run: yarn
+
       - name: Run tests
         run: |
           yarn run test:ci
+        env:
+          NODE_OPTIONS: no-network-family-autoselection
