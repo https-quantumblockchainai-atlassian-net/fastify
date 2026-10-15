@@ -6,9 +6,10 @@ receive your support and knowledge. This guide is our attempt to help you help
 us.
 
 > ## Note
-> This is an informal guide. Please review the formal [CONTRIBUTING
-> document](https://github.com/fastify/fastify/blob/main/CONTRIBUTING.md) for
-> full details and our [Developer Certificate of
+> This is an informal guide. For full details, please review the formal
+> [CONTRIBUTING
+> document](https://github.com/fastify/fastify/blob/main/CONTRIBUTING.md)
+> our [Developer Certificate of
 > Origin](https://en.wikipedia.org/wiki/Developer_Certificate_of_Origin).
 
 ## Table Of Contents
@@ -50,7 +51,7 @@ should expect from others):
 * We have a [Code of
   Conduct](https://github.com/fastify/fastify/blob/main/CODE_OF_CONDUCT.md). You
   must adhere to it to participate in this project.
-* If you open a pull request, please ensure that your contribution passes all
+* If you open a pull request, please ensure your contribution passes all
   tests. If there are test failures, you will need to address them before we can
   merge your contribution.
 
@@ -69,24 +70,22 @@ guide, do one of the following:
   issue first. That way, other people can weigh in on the discussion before you
   do any work.
 
-<!--
-TODO: add link to a style guide, when we have one, here as in
-https://github.com/github/opensource.guide/blob/2868efbf0c14aec821909c19e210c3603a4a7805/CONTRIBUTING.md#style-guide
--->
 
 ## Setting Up Your Environment
 <a id="contributing-environment"></a>
 
-Please adhere to the project's code and documentation style. Some popular tools
-that automatically "correct" code and documentation do not follow a style that
-conforms to the styles this project uses. Notably, this project uses
-[StandardJS](https://standardjs.com) for code formatting.
+Please adhere to the project's code and [documentation](./Style-Guide.md)
+style. Some popular tools that automatically "correct" code and documentation
+do not follow a style that conforms to this project's styles. Notably, this
+project uses [StandardJS](https://standardjs.com) for code formatting.
+
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/fastify/fastify)
 
 ### Using Visual Studio Code
 <a id="contributing-vscode"></a>
 
 What follows is how to use [Visual Studio Code (VSCode)
-portable](https://code.visualstudio.com/docs/editor/portable) to create a
+portable](https://code.visualstudio.com/docs/setup/portable) to create a
 Fastify specific environment. This guide is written as if you are setting up the
 environment on macOS, but the principles are the same across all platforms. See
 the previously linked VSCode portable guide for help with other platforms.
@@ -114,7 +113,7 @@ mkdir -p /Applications/VSCodeFastify/code-portable-data/{user-data,extensions}
 
 Before continuing, we need to add the `code` command to your terminal's `PATH`.
 To do so, we will [manually add VSCode to the
-`PATH`](https://code.visualstudio.com/docs/setup/mac#_launching-from-the-command-line).
+`PATH`](https://code.visualstudio.com/docs/setup/mac#_launch-vs-code-from-the-command-line).
 As outlined in that document, the instructions vary depending on your default
 shell, so you should follow the instructions in that guide as relates to your
 preferred shell. However, we will tweak them slightly by defining an alias
@@ -162,9 +161,11 @@ the left sidebar. But wait! We are not quite done yet. There are a few more
 baseline settings that should be set before VSCode is ready.
 
 Press `cmd+shift+p` to bring up the VSCode command input prompt. Type `open
-settings (json)` and then choose the same item from the filtered menu. This will
-open a document that is the settings for the editor. Paste the following JSON
-into this document, overwriting any text already present, and save it:
+settings (json)`. Three [VSCode Setting](https://code.visualstudio.com/docs/configure/settings)
+options will appear in the dropdown: Workspace, Default,
+and User settings. We recommend selecting Default. This will open a document
+that is the settings for the editor. Paste the following JSON into this
+document, overwriting any text already present, and save it:
 
 ```json
 {

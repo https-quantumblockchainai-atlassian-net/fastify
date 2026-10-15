@@ -136,6 +136,7 @@ dist
 .DS_Store
 
 # lock files
+bun.lockb
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
@@ -143,6 +144,9 @@ yarn.lock
 # editor files
 .vscode
 .idea
+
+# tap files
+.tap/
 
 # Optional compressed files (npm generated package, zip, etc)
 /*.zip
@@ -166,3 +170,11 @@ out.tap
 test/https/fastify.cert
 test/https/fastify.key
 /test/types/import.js
+
+# Agents files
+CLAUDE.md
+AGENTS.md
+.agents/
+.agent
+.claude
+.pi

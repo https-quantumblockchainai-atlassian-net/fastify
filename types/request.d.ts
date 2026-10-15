@@ -1,16 +1,39 @@
-import { FastifyLoggerInstance } from './logger'
-import { ContextConfigDefault, RawServerBase, RawServerDefault, RawRequestDefaultExpression, RequestBodyDefault, RequestQuerystringDefault, RequestParamsDefault, RequestHeadersDefault } from './utils'
-import { RouteGenericInterface } from './route'
+import { ErrorObject } from '@fastify/ajv-compiler'
+import { FastifyContextConfig } from './context'
 import { FastifyInstance } from './instance'
-import { FastifyTypeProvider, FastifyTypeProviderDefault, FastifyRequestType, ResolveFastifyRequestType } from './type-provider'
+import { FastifyBaseLogger } from './logger'
+import { FastifyRouteConfig, RouteGenericInterface, RouteHandlerMethod } from './route'
 import { FastifySchema } from './schema'
-import { FastifyContext } from './context'
+import { FastifyRequestType, FastifyTypeProvider, FastifyTypeProviderDefault, ResolveFastifyRequestType } from './type-provider'
+import { ContextConfigDefault, HTTPMethods, RawRequestDefaultExpression, RawServerBase, RawServerDefault, RequestBodyDefault, RequestHeadersDefault, RequestParamsDefault, RequestQuerystringDefault } from './utils'
 
+type HTTPRequestPart = 'body' | 'query' | 'querystring' | 'params' | 'headers'
 export interface RequestGenericInterface {
   Body?: RequestBodyDefault;
   Querystring?: RequestQuerystringDefault;
   Params?: RequestParamsDefault;
   Headers?: RequestHeadersDefault;
+}
+
+export interface ValidationFunction {
+  (input: any): boolean
+  errors?: null | ErrorObject[];
+}
+
+export interface RequestRouteOptions<ContextConfig = ContextConfigDefault, SchemaCompiler = FastifySchema> {
+  method: HTTPMethods | HTTPMethods[];
+  // `url` can be `undefined` for instance when `request.is404` is true
+  url: string | undefined;
+  bodyLimit: number;
+  handlerTimeout: number;
+  attachValidation: boolean;
+  logLevel: string;
+  exposeHeadRoute: boolean;
+  prefixTrailingSlash: string;
+  config: FastifyContextConfig & FastifyRouteConfig & ContextConfig;
+  schema?: SchemaCompiler; // it is empty for 404 requests
+  handler: RouteHandlerMethod;
+  version?: string;
 }
 
 /**
@@ -23,38 +46,67 @@ export interface FastifyRequest<RouteGeneric extends RouteGenericInterface = Rou
   SchemaCompiler extends FastifySchema = FastifySchema,
   TypeProvider extends FastifyTypeProvider = FastifyTypeProviderDefault,
   ContextConfig = ContextConfigDefault,
-  RequestType extends FastifyRequestType = ResolveFastifyRequestType<TypeProvider, SchemaCompiler, RouteGeneric>,
-  Logger extends FastifyLoggerInstance = FastifyLoggerInstance
+  Logger extends FastifyBaseLogger = FastifyBaseLogger,
+  RequestType extends FastifyRequestType = ResolveFastifyRequestType<TypeProvider, SchemaCompiler, RouteGeneric>
+// ^ Temporary Note: RequestType has been re-ordered to be the last argument in
+//   generic list. This generic argument is now considered optional as it can be
+//   automatically inferred from the SchemaCompiler, RouteGeneric and TypeProvider
+//   arguments. Implementations that already pass this argument can either omit
+//   the RequestType (preferred) or swap Logger and RequestType arguments when
+//   creating custom types of FastifyRequest. Related issue #4123
 > {
-  id: any;
-  params: RequestType['params'];
+  id: string;
+  params: RequestType['params']; // deferred inference
   raw: RawRequest;
   query: RequestType['query'];
   headers: RawRequest['headers'] & RequestType['headers']; // this enables the developer to extend the existing http(s|2) headers list
   log: Logger;
   server: FastifyInstance;
   body: RequestType['body'];
-  context: FastifyContext<ContextConfig>;
 
   /** in order for this to be used the user should ensure they have set the attachValidation option. */
   validationError?: Error & { validation: any; validationContext: string };
 
   /**
-   * @deprecated Use `raw` property
+   * Derived from request socket metadata or forwarding headers.
+   * Treat as untrusted input and validate before security-sensitive use.
    */
-  readonly req: RawRequest & RouteGeneric['Headers']; // this enables the developer to extend the existing http(s|2) headers list
   readonly ip: string;
+  /**
+   * Derived from forwarding headers when trustProxy is enabled.
+   * Treat as untrusted input and validate before security-sensitive use.
+   */
   readonly ips?: string[];
+  /**
+   * Derived from Host/:authority/X-Forwarded-Host request metadata.
+   * Treat as untrusted input and validate before security-sensitive use.
+   */
+  readonly host: string;
+  /**
+   * Parsed from request host metadata.
+   * Treat as untrusted input and validate before security-sensitive use.
+   */
+  readonly port: number | null;
   readonly hostname: string;
   readonly url: string;
+  readonly originalUrl: string;
+  /**
+   * Derived from socket state or forwarding headers.
+   * Treat as untrusted input and validate before security-sensitive use.
+   */
   readonly protocol: 'http' | 'https';
   readonly method: string;
-  readonly routerPath: string;
-  readonly routerMethod: string;
+  readonly routeOptions: Readonly<RequestRouteOptions<ContextConfig, SchemaCompiler>>
   readonly is404: boolean;
   readonly socket: RawRequest['socket'];
+  readonly signal: AbortSignal;
+  readonly mediaType: string | undefined;
 
-  // Prefer `socket` over deprecated `connection` property in node 13.0.0 or higher
-  // @deprecated
-  readonly connection: RawRequest['socket'];
+  getValidationFunction(httpPart: HTTPRequestPart): ValidationFunction | undefined
+  getValidationFunction(schema: { [key: string]: any }): ValidationFunction | undefined
+  compileValidationSchema(schema: { [key: string]: any }, httpPart?: HTTPRequestPart): ValidationFunction
+  validateInput(input: any, schema: { [key: string]: any }, httpPart?: HTTPRequestPart): boolean
+  validateInput(input: any, httpPart?: HTTPRequestPart): boolean
+  getDecorator<T>(name: string | symbol): T;
+  setDecorator<T = unknown>(name: string | symbol, value: T): void;
 }
